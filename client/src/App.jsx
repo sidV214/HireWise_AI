@@ -13,7 +13,7 @@ import InterviewHistory from './pages/InterviewHistory.jsx'
 import Pricing from './pages/Pricing.jsx'
 import InterviewReport from './pages/InterviewReport.jsx'
 
-export const ServerURL = "http://localhost:8000"
+export const ServerURL = "https://hirewise-ai-s5oy.onrender.com"
 
 function App() {
 

@@ -11,7 +11,7 @@ import paymentRouter from "./routes/payment.route.js";
 
 const app = express();
 app.use(cors({
-    origin: "https://hirewiseai-a4pn.onrender.com",
+    origin: ["http://localhost:5173", "https://hirewiseai-a4pn.onrender.com"],
     credentials: true
 }))
 

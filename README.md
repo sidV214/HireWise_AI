@@ -20,7 +20,7 @@
 
 ## ✨ Project Showcase
 
-*(Place your screenshots in a `docs/` folder in your project root to activate these images!)*
+
 
 <div align="center">
   <img src="docs/home.png" alt="HireWise AI Landing Page" width="800" style="border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); margin-bottom: 20px;"/>

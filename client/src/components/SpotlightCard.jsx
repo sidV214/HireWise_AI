@@ -1,72 +1,25 @@
-import React, { useRef, useState } from 'react';
-import { motion, useMotionValue, useSpring, useTransform, useMotionTemplate } from 'framer-motion';
+import React from 'react';
+import { motion } from 'framer-motion';
 
-export default function SpotlightCard({ children, className = '', glowColor = 'rgba(52, 211, 153, 0.06)', tilt = false, ...props }) {
-  const divRef = useRef(null);
-  const mouseXMotion = useMotionValue(0);
-  const mouseYMotion = useMotionValue(0);
-  const [opacity, setOpacity] = useState(0);
-
-  const x = useMotionValue(0);
-  const y = useMotionValue(0);
-
-  const mouseXSpring = useSpring(x);
-  const mouseYSpring = useSpring(y);
-
-  const rotateX = useTransform(mouseYSpring, [-0.5, 0.5], ["2deg", "-2deg"]);
-  const rotateY = useTransform(mouseXSpring, [-0.5, 0.5], ["-2deg", "2deg"]);
-
-  const handleMouseMove = (e) => {
-    if (!divRef.current) return;
-    const rect = divRef.current.getBoundingClientRect();
-    
-    const mouseX = e.clientX - rect.left;
-    const mouseY = e.clientY - rect.top;
-    mouseXMotion.set(mouseX);
-    mouseYMotion.set(mouseY);
-    
-    if (tilt) {
-      const xPct = mouseX / rect.width - 0.5;
-      const yPct = mouseY / rect.height - 0.5;
-      x.set(xPct);
-      y.set(yPct);
-    }
-  };
-
-  const handleMouseLeave = () => {
-    setOpacity(0);
-    if (tilt) {
-      x.set(0);
-      y.set(0);
-    }
-  };
-
+export default function SpotlightCard({ children, className = '', glowColor = 'rgba(16, 185, 129, 0.1)', tilt = false, ...props }) {
   return (
     <motion.div
-      ref={divRef}
-      onMouseMove={handleMouseMove}
-      onMouseEnter={() => setOpacity(1)}
-      onMouseLeave={handleMouseLeave}
-      style={{
-        rotateX: tilt ? rotateX : 0,
-        rotateY: tilt ? rotateY : 0,
-        transformStyle: tilt ? "preserve-3d" : "flat",
-      }}
-      className={`relative overflow-hidden ${className}`}
+      whileHover={{ y: -4, scale: 1.005 }}
+      transition={{ duration: 0.4, ease: 'easeOut' }}
+      className={`group relative overflow-hidden bg-gray-100/40 backdrop-blur-md rounded-2xl border border-gray-200/40 shadow-[0_4px_20px_-2px_rgba(0,0,0,0.3)] hover:shadow-[0_15px_30px_-5px_rgba(16,185,129,0.2)] hover:border-emerald-500/30 transition-all duration-500 ${className}`}
       {...props}
     >
+      {/* Light Sweep (Shimmer) Effect on Hover */}
       <motion.div
-        className="pointer-events-none absolute -inset-px transition-opacity duration-300 z-0"
-        style={{
-          opacity,
-          background: useMotionTemplate`radial-gradient(500px circle at ${mouseXMotion}px ${mouseYMotion}px, ${glowColor}, transparent 40%)`
-        }}
+        className="absolute inset-0 z-0 pointer-events-none"
+        style={{ background: `linear-gradient(90deg, transparent, ${glowColor}, transparent)` }}
+        initial={{ x: '-150%', opacity: 0 }}
+        whileHover={{ x: '150%', opacity: 1 }}
+        transition={{ duration: 1.5, ease: "easeInOut", repeat: Infinity }}
       />
-      {/* Wrapper to ensure children stay above the spotlight glow */}
-      <div 
-        className="relative z-10 h-full w-full"
-        style={{ transform: tilt ? "translateZ(20px)" : "none" }}
-      >
+      
+      {/* Main Content */}
+      <div className="relative z-10 h-full w-full">
         {children}
       </div>
     </motion.div>

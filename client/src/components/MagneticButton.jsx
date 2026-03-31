@@ -1,9 +1,14 @@
-import React, { useRef, useState } from 'react';
-import { motion } from 'framer-motion';
+import React, { useRef } from 'react';
+import { motion, useMotionValue, useSpring } from 'framer-motion';
 
 export default function MagneticButton({ children, className = '', onClick, ...props }) {
     const ref = useRef(null);
-    const [position, setPosition] = useState({ x: 0, y: 0 });
+    const xMotion = useMotionValue(0);
+    const yMotion = useMotionValue(0);
+    
+    const springConfig = { damping: 20, stiffness: 180, mass: 0.1 };
+    const x = useSpring(xMotion, springConfig);
+    const y = useSpring(yMotion, springConfig);
 
     const handleMouse = (e) => {
         if (!ref.current) return;
@@ -11,21 +16,22 @@ export default function MagneticButton({ children, className = '', onClick, ...p
         const { height, width, left, top } = ref.current.getBoundingClientRect();
         const middleX = clientX - (left + width / 2);
         const middleY = clientY - (top + height / 2);
-        setPosition({ x: middleX * 0.08, y: middleY * 0.08 });
+        xMotion.set(middleX * 0.08);
+        yMotion.set(middleY * 0.08);
     };
 
     const reset = () => {
-        setPosition({ x: 0, y: 0 });
+        xMotion.set(0);
+        yMotion.set(0);
     };
 
-    const { x, y } = position;
+
     return (
         <motion.button
             ref={ref}
             onMouseMove={handleMouse}
             onMouseLeave={reset}
-            animate={{ x, y }}
-            transition={{ type: "spring", stiffness: 180, damping: 20, mass: 0.1 }}
+            style={{ x, y }}
             className={`relative ${className}`}
             onClick={onClick}
             {...props}

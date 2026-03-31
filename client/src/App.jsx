@@ -1,6 +1,6 @@
 import React from 'react'
 import { Route, Routes, useLocation } from 'react-router-dom'
-import { AnimatePresence, motion, useScroll, useSpring, MotionConfig } from 'motion/react'
+import { AnimatePresence, motion, MotionConfig } from 'motion/react'
 import CustomCursor from './components/CustomCursor'
 import Home from './pages/Home'
 import Auth from './pages/Auth'
@@ -19,13 +19,6 @@ function App() {
 
   const dispatch = useDispatch()
   const location = useLocation()
-  
-  const { scrollYProgress } = useScroll()
-  const scaleX = useSpring(scrollYProgress, {
-    stiffness: 100,
-    damping: 30,
-    restDelta: 0.001
-  })
 
   useEffect(() => {
     const getUser = async () => {
@@ -59,10 +52,6 @@ function App() {
 
       <MotionConfig reducedMotion="user">
       <CustomCursor />
-      <motion.div
-        style={{ scaleX, transformOrigin: "0%" }}
-        className="fixed top-0 left-0 right-0 h-1.5 bg-emerald-600 z-50 origin-left"
-      />
       <AnimatePresence mode="wait">
         <Routes location={location} key={location.pathname}>
         <Route path='/' element={<Home />} />

@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react'
+import React, { useRef, useState, useMemo } from 'react'
 import { motion } from 'motion/react'
 import { FaMicrophone, FaMicrophoneSlash } from 'react-icons/fa'
 import videoOne from '../assets/videos/Random_Video_Generation.mp4'
@@ -339,14 +339,16 @@ function Step2Interview({ interviewData, onFinish }) {
                 {/* VIDEO SECTION */}
                 <div className="w-full lg:w-[35%] bg-gray-100/50 flex flex-col items-center p-6 space-y-6 border-r border-gray-200/30">
                     <div className="w-full max-w-md rounded-2xl overflow-hidden shadow-xl">
-                        <video
-                            className='w-full h-auto object-cover'
-                            muted
-                            playsInline
-                            preload='auto'
-                            src={videoSource}
-                            key={videoSource}
-                            ref={videoRef} />
+                        {useMemo(() => (
+                            <video
+                                className='w-full h-auto object-cover'
+                                muted
+                                playsInline
+                                preload='auto'
+                                src={videoSource}
+                                key={videoSource}
+                                ref={videoRef} />
+                        ), [videoSource])}
                     </div>
 
                     {/* Subtitle  */}

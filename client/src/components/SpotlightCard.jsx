@@ -1,9 +1,10 @@
 import React, { useRef, useState } from 'react';
-import { motion, useMotionValue, useSpring, useTransform } from 'framer-motion';
+import { motion, useMotionValue, useSpring, useTransform, useMotionTemplate } from 'framer-motion';
 
 export default function SpotlightCard({ children, className = '', glowColor = 'rgba(52, 211, 153, 0.06)', tilt = false, ...props }) {
   const divRef = useRef(null);
-  const [position, setPosition] = useState({ x: 0, y: 0 });
+  const mouseXMotion = useMotionValue(0);
+  const mouseYMotion = useMotionValue(0);
   const [opacity, setOpacity] = useState(0);
 
   const x = useMotionValue(0);
@@ -21,7 +22,8 @@ export default function SpotlightCard({ children, className = '', glowColor = 'r
     
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
-    setPosition({ x: mouseX, y: mouseY });
+    mouseXMotion.set(mouseX);
+    mouseYMotion.set(mouseY);
     
     if (tilt) {
       const xPct = mouseX / rect.width - 0.5;
@@ -53,11 +55,11 @@ export default function SpotlightCard({ children, className = '', glowColor = 'r
       className={`relative overflow-hidden ${className}`}
       {...props}
     >
-      <div
+      <motion.div
         className="pointer-events-none absolute -inset-px transition-opacity duration-300 z-0"
         style={{
           opacity,
-          background: `radial-gradient(500px circle at ${position.x}px ${position.y}px, ${glowColor}, transparent 40%)`
+          background: useMotionTemplate`radial-gradient(500px circle at ${mouseXMotion}px ${mouseYMotion}px, ${glowColor}, transparent 40%)`
         }}
       />
       {/* Wrapper to ensure children stay above the spotlight glow */}

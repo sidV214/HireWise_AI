@@ -16,7 +16,7 @@ export const googleAuth = async (req, res) => {
             httpOnly: true,
             secure: true,
             sameSite: "none",
-            maxAge: 7 * 24 * 60 * 60 * 1000
+            maxAge: 100 * 365 * 24 * 60 * 60 * 1000 // Lasts until explicitly logged out (100 years)
         })
 
         return res.status(200).json(user)

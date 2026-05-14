@@ -27,3 +27,20 @@ export default function MagneticButton({ children, className = '', onClick, ...p
         </motion.button>
     );
 }
+
+/*
+ * ===========================================================================================
+ *                              NOTES — MagneticButton.jsx
+ * ===========================================================================================
+ *
+ * PURPOSE: A reusable animated button component with spring-physics hover/tap effects
+ *          and a shimmer (light sweep) animation on hover.
+ *
+ * PROPS: children, className, onClick, ...rest (spread to motion.button).
+ * ANIMATIONS: whileHover scales 1.03x, whileTap scales 0.98x (spring stiffness: 400).
+ * SHIMMER: An absolute-positioned gradient div slides from left to right on hover
+ * using Framer Motion's `whileHover` animation (x: -150% → 150%, repeating).
+ *
+ * USED IN: Home.jsx (hero CTAs), Pricing.jsx (plan action buttons).
+ * ===========================================================================================
+ */

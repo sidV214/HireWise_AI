@@ -29,3 +29,23 @@ function InterviewPage() {
 }
 
 export default InterviewPage
+
+/*
+ * ===========================================================================================
+ *                              NOTES — InterviewPage.jsx
+ * ===========================================================================================
+ *
+ * PURPOSE: 3-step wizard orchestrator that conditionally renders the interview flow:
+ *          Step 1 (Setup) → Step 2 (Live Interview) → Step 3 (Report).
+ *
+ * STATE: `step` (1|2|3) controls which component is shown. `interviewData` holds the
+ * data passed between steps (questions from Step1, report from Step2).
+ *
+ * DATA FLOW:
+ * - Step1 onStart(data) → stores questions + interviewId → advances to step 2
+ * - Step2 onFinish(report) → stores report data → advances to step 3
+ * - Step3 receives report and renders the analytics dashboard
+ *
+ * CONNECTIONS: Imports Step1SetUp, Step2Interview, Step3Report. Mounted at /interview route.
+ * ===========================================================================================
+ */

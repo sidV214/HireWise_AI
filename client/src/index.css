@@ -50,3 +50,32 @@
     @apply font-display tracking-tight bg-clip-text text-transparent bg-linear-to-r from-emerald-400 to-cyan-400;
   }
 }
+
+/*
+ * ===========================================================================================
+ *                              NOTES — index.css
+ * ===========================================================================================
+ *
+ * PURPOSE: The global design system configuration for the entire frontend. Defines the
+ *          custom Tailwind v4 theme tokens and utility classes.
+ *
+ * DESIGN TECHNIQUE — INVERTED GRAYS:
+ * The gray scale is intentionally reversed (gray-50 = #0A0A0B near-black, gray-900 = #FFFFFF).
+ * This allows using standard Tailwind gray classes (bg-gray-50, text-gray-800) while rendering
+ * a dark-mode aesthetic WITHOUT needing a separate dark: variant system. When Tailwind
+ * generates `bg-gray-50`, it resolves to near-black instead of near-white.
+ *
+ * CUSTOM TOKENS:
+ * - Fonts: Inter (body) + Outfit (display headings)
+ * - Emerald palette: Dark-mode optimized greens for accents and CTAs
+ * - Custom shadows: soft, glow-emerald, premium, glass — multi-layered for depth
+ *
+ * UTILITY CLASSES:
+ * - .glass-panel: Glassmorphism card with blur, transparency, and border
+ * - .glass-panel-dark: Heavier glass effect for emphasized containers
+ * - .text-gradient: Emerald-to-cyan gradient text
+ * - .text-gradient-display: Display-font version with tracking adjustment
+ *
+ * CONNECTIONS: Imported by main.jsx. All components use these tokens via Tailwind classes.
+ * ===========================================================================================
+ */

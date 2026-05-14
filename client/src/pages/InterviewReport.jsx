@@ -34,3 +34,23 @@ function InterviewReport() {
 }
 
 export default InterviewReport
+
+/*
+ * ===========================================================================================
+ *                              NOTES — InterviewReport.jsx
+ * ===========================================================================================
+ *
+ * PURPOSE: Page-level wrapper that fetches a historical interview report by ID and
+ *          renders the Step3Report component with the fetched data.
+ *
+ * DATA FETCHING: Extracts `:id` from URL params via useParams(). Calls
+ * GET /api/interview/report/:id on mount. Sets the report state on success.
+ *
+ * LOADING: Shows "Loading Report..." while the API call is pending.
+ * REUSE: Delegates all rendering to Step3Report — the same component used for live
+ * interview reports. This ensures visual consistency between live and historical views.
+ *
+ * CONNECTIONS: Mounted at /report/:id route. Calls interview controller's
+ * getInterviewReport. Renders Step3Report component.
+ * ===========================================================================================
+ */

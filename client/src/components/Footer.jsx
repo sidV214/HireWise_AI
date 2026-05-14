@@ -18,3 +18,16 @@ function Footer() {
 }
 
 export default Footer
+
+/*
+ * ===========================================================================================
+ *                              NOTES — Footer.jsx
+ * ===========================================================================================
+ *
+ * PURPOSE: Simple branding footer rendered at the bottom of the Home page.
+ *          Displays the HireWise_AI logo and tagline.
+ *
+ * ROLE IN ARCHITECTURE: Presentational component with zero logic or state.
+ * Only rendered in Home.jsx. Uses glass-panel styling consistent with the design system.
+ * ===========================================================================================
+ */

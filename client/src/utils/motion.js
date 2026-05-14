@@ -71,3 +71,28 @@ export const scrollRevealRight = {
         transition: { duration: 0.7, ease: [0.16, 1, 0.3, 1] }
     }
 };
+
+/*
+ * ===========================================================================================
+ *                              NOTES — motion.js
+ * ===========================================================================================
+ *
+ * PURPOSE: Centralized animation variant definitions for Framer Motion. Prevents
+ *          animation configuration duplication across components.
+ *
+ * VARIANTS DEFINED:
+ * 1. pageTransition: Full-page opacity fade (initial→animate→exit).
+ * 2. scrollReveal: Scroll-triggered entrance (y: 60→0, opacity 0→1).
+ * 3. staggerContainer: Parent variant that staggers children by 0.1s each.
+ * 4. cardEntry: Card-specific entrance with y-offset and opacity.
+ * 5. buttonTap: Micro-scale (0.98x) on tap for tactile button feedback.
+ * 6. scrollRevealLeft/Right: Horizontal scroll entrances (x: ±50).
+ *
+ * PATTERN: Each variant is an object with named states (initial, animate, exit, hidden,
+ * visible, tap) that Framer Motion maps to component lifecycle events via props like
+ * `variants`, `initial`, `animate`, `whileInView`.
+ *
+ * CONNECTIONS: Imported by Home.jsx (scrollReveal) and Pricing.jsx (pageTransition,
+ * staggerContainer, cardEntry, buttonTap).
+ * ===========================================================================================
+ */

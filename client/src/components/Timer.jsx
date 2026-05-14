@@ -21,3 +21,19 @@ function Timer({ timeLeft, totalTime }) {
 }
 
 export default Timer
+
+/*
+ * ===========================================================================================
+ *                              NOTES — Timer.jsx
+ * ===========================================================================================
+ *
+ * PURPOSE: Renders a circular countdown timer using react-circular-progressbar.
+ *          Displays remaining seconds and a visual progress ring.
+ *
+ * PROPS: timeLeft (current seconds remaining), totalTime (max seconds for the question).
+ * CALCULATION: percentage = (timeLeft / totalTime) * 100 drives the arc fill.
+ * STYLING: Emerald path, zinc text, dark trail — consistent with the app's design system.
+ *
+ * USED IN: Step2Interview.jsx — rendered in the left panel during active interview.
+ * ===========================================================================================
+ */

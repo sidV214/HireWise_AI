@@ -387,3 +387,195 @@ export const getInterviewReport = async (req, res) => {
         return res.status(500).json({ message: `Failed to find current user interview report: ${error}` })
     }
 }
+
+/*
+ * ===========================================================================================
+ *                           NOTES — interview.controller.js
+ * ===========================================================================================
+ *
+ * PURPOSE: Contains all business logic for the core interview feature — resume parsing,
+ *          AI question generation, answer evaluation, interview finalization, and report
+ *          retrieval. This is the MOST CRITICAL file in the entire backend.
+ *
+ * ROLE IN ARCHITECTURE:
+ * ---------------------
+ * This file lives in the `server/controllers` layer. It orchestrates the full interview
+ * lifecycle across 6 exported handler functions. It bridges the AI service layer
+ * (OpenRouter), the data layer (User + Interview models), and the file system (PDF parsing).
+ * All endpoints in this controller require `isAuth` middleware (except none — all are protected).
+ *
+ * IMPORTS & DEPENDENCIES:
+ * -----------------------
+ * 1. `fs` (Node.js built-in): Used for file I/O — reading uploaded PDF buffers from disk
+ *    and deleting temp files after processing via `unlinkSync`.
+ * 2. `pdfjs-dist/legacy/build/pdf.mjs`: Mozilla's PDF parsing library. The `/legacy/` path
+ *    ensures compatibility with Node.js (avoids Worker thread requirements).
+ * 3. `askAI` (from ../services/openRouter.service.js): The AI abstraction layer that sends
+ *    prompts to GPT-4o-mini via OpenRouter and returns text responses.
+ * 4. `User` (from ../models/User.model.js): Used to check credit balance and deduct credits.
+ * 5. `Interview` (from ../models/Interview.model.js): Used to create, update, and query
+ *    interview documents with their nested questions array.
+ *
+ * FUNCTION-BY-FUNCTION ANALYSIS:
+ * ------------------------------
+ *
+ * [analyzeResume] — POST /api/interview/resume
+ *   Parameters: req.file (Multer file object with .path to temp PDF)
+ *   Returns: JSON { role, experience, projects, skills, resumeText }
+ *   Side Effects:
+ *     - FILE READ: Reads the uploaded PDF from disk using `fs.promises.readFile`
+ *     - FILE DELETE: Deletes the temp file after parsing via `fs.unlinkSync`
+ *     - EXTERNAL API: Calls OpenRouter AI to extract structured data from resume text
+ *   Flow:
+ *     1. Validates that `req.file` exists (Multer populates this).
+ *     2. Reads the file buffer, converts to Uint8Array for pdfjs-dist.
+ *     3. Iterates through every page of the PDF, extracting text items.
+ *     4. Concatenates all text, normalizes whitespace.
+ *     5. Sends the raw text to the AI with a system prompt requesting structured JSON output.
+ *     6. Parses the AI's JSON response (strips markdown code fences if present).
+ *     7. Deletes the temporary file from disk (cleanup).
+ *     8. Returns the parsed resume data to the frontend.
+ *   Edge Cases:
+ *     - If the PDF is image-based (scanned), `getTextContent()` returns empty items.
+ *     - If the AI returns malformed JSON, `JSON.parse` throws, caught by the catch block.
+ *     - In the catch block, if the temp file still exists, it's cleaned up to prevent
+ *       disk space leaks.
+ *
+ * [generateQuestions] — POST /api/interview/generate-questions
+ *   Parameters: req.body { role, experience, mode, resumeText, projects, skills }
+ *   Returns: JSON { interviewId, creditsLeft, userName, questions }
+ *   Side Effects:
+ *     - DB READ: Fetches User to check credits
+ *     - DB WRITE: Deducts 50 credits from User, creates new Interview document
+ *     - EXTERNAL API: Calls OpenRouter AI to generate 5 interview questions
+ *   Flow:
+ *     1. Validates required fields (role, experience, mode).
+ *     2. Fetches the authenticated user and checks if they have ≥ 50 credits.
+ *     3. Constructs a user prompt with all interview context.
+ *     4. Sends system + user prompts to AI requesting 5 questions with difficulty progression.
+ *     5. Splits the AI response by newlines to extract individual questions.
+ *     6. Deducts 50 credits from the user and saves.
+ *     7. Creates an Interview document with the questions array (each with difficulty and timeLimit).
+ *     8. Returns the interview data to the frontend.
+ *   Edge Cases:
+ *     - If credits < 50, returns 404 with an insufficient credits message.
+ *     - If the AI returns empty or whitespace-only response, returns 500.
+ *     - Question difficulty is mapped by index position: [easy, easy, medium, medium, hard].
+ *     - Time limits are assigned by difficulty: [60s, 60s, 90s, 90s, 120s].
+ *
+ * [submitAnswer] — POST /api/interview/submit-answer
+ *   Parameters: req.body { interviewId, questionIndex, answer, timeTaken }
+ *   Returns: JSON { feedback }
+ *   Side Effects:
+ *     - DB READ: Fetches the Interview document
+ *     - DB WRITE: Updates the specific question's scores and feedback
+ *     - EXTERNAL API: Calls OpenRouter AI to evaluate the answer
+ *   Flow:
+ *     1. Fetches the interview and accesses the question at `questionIndex`.
+ *     2. If no answer was provided, assigns score 0 and generic feedback.
+ *     3. If time exceeded the question's limit, assigns score 0 with timeout feedback.
+ *     4. Otherwise, sends the question + answer to AI for evaluation.
+ *     5. AI returns JSON with confidence, communication, correctness, finalScore, feedback.
+ *     6. Updates the question sub-document with all scores and saves.
+ *   Edge Cases:
+ *     - Empty answer (user didn't speak or type anything) → score 0, no AI call.
+ *     - Time exceeded → score 0, answer still saved for reference.
+ *     - AI JSON parsing failure → caught by try/catch, returns 500.
+ *
+ * [finishInterview] — POST /api/interview/finish
+ *   Parameters: req.body { interviewId }
+ *   Returns: JSON { finalScore, confidence, communication, correctness, questionWiseScore }
+ *   Side Effects:
+ *     - DB READ: Fetches the Interview document
+ *     - DB WRITE: Sets `status: "Completed"` and `finalScore` on the Interview
+ *   Flow:
+ *     1. Fetches the interview by ID.
+ *     2. Iterates through all questions to compute totals for each metric.
+ *     3. Calculates averages (total / number of questions).
+ *     4. Saves the final score and marks the interview as "Completed".
+ *     5. Returns the aggregated report data.
+ *   Edge Cases:
+ *     - If a question has no score (wasn't answered), `|| 0` ensures it defaults to 0.
+ *     - Division by zero is guarded with `totalQuestions ? ... : 0`.
+ *
+ * [getMyInterviews] — GET /api/interview/get-interview
+ *   Parameters: req.userId (injected by isAuth middleware)
+ *   Returns: JSON array of interview summaries
+ *   Side Effects:
+ *     - DB READ: Queries Interview collection filtered by userId
+ *   Flow:
+ *     1. Finds all interviews belonging to the authenticated user.
+ *     2. Sorts by `createdAt` descending (newest first).
+ *     3. Selects only summary fields (role, experience, finalScore, status, createdAt).
+ *   Edge Cases:
+ *     - Returns an empty array if the user has no interviews.
+ *
+ * [getInterviewReport] — GET /api/interview/report/:id
+ *   Parameters: req.params.id (Interview ObjectId)
+ *   Returns: JSON { finalScore, confidence, communication, correctness, questionWiseScore }
+ *   Side Effects:
+ *     - DB READ: Fetches a single Interview document by ID
+ *   Flow:
+ *     1. Fetches the interview by the URL parameter `:id`.
+ *     2. If not found, returns 404.
+ *     3. Computes average metrics from all questions.
+ *     4. Returns the full report including all question sub-documents.
+ *   Edge Cases:
+ *     - Invalid ObjectId format will cause Mongoose to throw a CastError, caught by catch.
+ *
+ * CONNECTIONS (Dependency Map):
+ * ----------------------------
+ * CALLED BY: `server/routes/interview.route.js` (all 6 endpoints)
+ * CALLS OUT TO:
+ *   - `server/services/openRouter.service.js` (askAI — for resume parsing, question gen, answer eval)
+ *   - `server/models/User.model.js` (credit checks and deductions)
+ *   - `server/models/Interview.model.js` (CRUD operations)
+ * INBOUND CALLERS:
+ *   - Step1SetUp.jsx → analyzeResume, generateQuestions
+ *   - Step2Interview.jsx → submitAnswer, finishInterview
+ *   - InterviewHistory.jsx → getMyInterviews
+ *   - InterviewReport.jsx → getInterviewReport
+ *
+ * DESIGN PATTERNS:
+ * ----------------
+ * - **Pipeline Pattern**: The interview lifecycle flows through a strict pipeline:
+ *   analyzeResume → generateQuestions → submitAnswer (×5) → finishInterview.
+ *   Each function handles exactly one stage and hands off to the next via the frontend.
+ * - **Prompt Engineering Pattern**: System prompts are carefully structured to constrain
+ *   the AI's output format (strict JSON, word limits, no explanations). This ensures
+ *   reliable machine-parseable responses from an inherently unpredictable LLM.
+ * - **Defensive Parsing**: The `cleanedResponse.replace(/```json\n?|\n?```/g, "")` handles
+ *   the common LLM behavior of wrapping JSON in markdown code fences, preventing
+ *   `JSON.parse` from failing.
+ *
+ * INTERVIEW QUESTIONS:
+ * --------------------
+ * Q1: Why is `pdfjs-dist/legacy/build/pdf.mjs` used instead of the standard import?
+ * A1: The standard pdfjs-dist requires a Web Worker (for browser environments). The
+ *     `/legacy/` path provides a Node.js-compatible build that runs synchronously
+ *     without needing a Worker thread, making it suitable for server-side PDF processing.
+ *
+ * Q2: Why are credits deducted AFTER the AI generates questions, not before?
+ * A2: Actually, credits are deducted BEFORE the interview is created (line 160-161).
+ *     `user.credits -= 50; await user.save()` runs before `Interview.create()`. This
+ *     prevents a race condition where a user could start multiple interviews simultaneously
+ *     by rapidly clicking "Start" before the credit deduction is processed.
+ *
+ * Q3: What happens if the AI response contains invalid JSON?
+ * A3: `JSON.parse(cleanedResponse)` will throw a `SyntaxError`. The catch block catches
+ *     this and returns a 500 error to the frontend. The user would need to retry. This
+ *     is a known reliability concern with LLM-based architectures.
+ *
+ * Q4: Why does `finishInterview` recalculate averages instead of using pre-computed values?
+ * A4: Because questions are submitted one-by-one via `submitAnswer`. The final score is
+ *     only meaningful after ALL questions have been answered. Computing averages at the
+ *     end ensures accuracy regardless of the order or timing of submissions.
+ *
+ * Q5: How does the `timeTaken > question.timeLimit` check prevent cheating?
+ * A5: The frontend sends the elapsed time, and the backend validates it against the
+ *     stored `timeLimit`. If the user somehow bypasses the frontend timer, the backend
+ *     still enforces the limit. However, a sophisticated attacker could manipulate the
+ *     `timeTaken` value in the request body — the only true fix would be server-side
+ *     time tracking.
+ * ===========================================================================================
+ */

@@ -104,3 +104,122 @@ function Navbar() {
 }
 
 export default Navbar
+
+/*
+ * ===========================================================================================
+ *                              NOTES — Navbar.jsx
+ * ===========================================================================================
+ *
+ * PURPOSE: Top navigation bar providing branding, credit display, user menu with dropdown,
+ *          and authentication gating. This is the primary navigation and account control
+ *          component visible on the Home page.
+ *
+ * ROLE IN ARCHITECTURE:
+ * ---------------------
+ * Rendered by Home.jsx. This is NOT a globally persistent navbar — it only appears on the
+ * Home/landing page. Other pages (Interview, Pricing, History) have their own navigation.
+ * The Navbar serves as the first auth checkpoint: if a user interacts with credits or
+ * profile without being logged in, it opens the AuthModel overlay.
+ *
+ * IMPORTS & DEPENDENCIES:
+ * -----------------------
+ * 1. `motion` (motion/react): For the slide-down entrance animation of the navbar.
+ * 2. `React, useState`: Component rendering and local popup toggle states.
+ * 3. `useDispatch, useSelector` (react-redux): Read userData for auth state; dispatch
+ *    setUserData(null) on logout.
+ * 4. `BsRobot` (react-icons/bs): Robot icon for the brand logo.
+ * 5. `BsCoin` (react-icons/bs): Coin icon for the credits button.
+ * 6. `HiOutlineLogout` (react-icons/hi): Logout icon in the user dropdown.
+ * 7. `FaUserAstronaut` (react-icons/fa): Placeholder avatar for unauthenticated users.
+ * 8. `useNavigate` (react-router-dom): Navigates to /pricing, /history, or "/" on actions.
+ * 9. `axios`: HTTP client for the logout API call.
+ * 10. `ServerURL` (../App): Backend base URL.
+ * 11. `setUserData` (../redux/userSlice): Redux action for clearing user state.
+ * 12. `AuthModel` (./AuthModel): Modal login overlay.
+ *
+ * STATE VARIABLES:
+ * ----------------
+ * | Variable        | Type    | Purpose                                          |
+ * |-----------------|---------|--------------------------------------------------|
+ * | showCreditPopup | boolean | Toggles the credits dropdown ("Buy more" popup)  |
+ * | showUserPopup   | boolean | Toggles the user profile dropdown                |
+ * | showAuth        | boolean | Toggles the AuthModel login overlay               |
+ *
+ * FUNCTION ANALYSIS:
+ * ------------------
+ *
+ * [handleLogout()] — Session termination
+ *   Flow:
+ *     1. Calls GET /api/auth/logout with credentials (backend clears the cookie).
+ *     2. Dispatches setUserData(null) to clear Redux state.
+ *     3. Closes both popups (credit and user).
+ *     4. Navigates to "/" (home page).
+ *   Edge Cases:
+ *     - If the logout API fails, the error is logged but the UI doesn't change.
+ *       The cookie may still be valid, but the Redux state is already cleared on catch.
+ *
+ * UI LAYOUT:
+ * ----------
+ * Centered max-w-6xl container with glass-panel styling:
+ *
+ * LEFT SIDE:
+ *   - BsRobot icon in emerald badge + "HireWise_AI" text (hidden on mobile via md:block)
+ *
+ * RIGHT SIDE:
+ *   - Credits button: Shows BsCoin icon + credit count (userData?.credits || 0).
+ *     - If NOT logged in: opens AuthModel.
+ *     - If logged in: toggles credit popup dropdown.
+ *     - Credit popup contains: message text + "Buy more credits" button → /pricing.
+ *   - Profile button: Shows user's first initial (uppercase) in a black circle.
+ *     - If NOT logged in: shows FaUserAstronaut icon; opens AuthModel on click.
+ *     - If logged in: toggles user dropdown.
+ *     - User dropdown contains: user name, "Interview History" button → /history,
+ *       "Logout" button with HiOutlineLogout icon.
+ *
+ * POPUP MUTUAL EXCLUSION:
+ *   When one popup opens, the other closes:
+ *   - Credit click: setShowCreditPopup(toggle), setShowUserPopup(false)
+ *   - Profile click: setShowUserPopup(toggle), setShowCreditPopup(false)
+ *
+ * ANIMATIONS:
+ * -----------
+ * - Navbar slides down from y: -40 with 0.3s duration on mount.
+ * - Popups appear immediately (no animation) via conditional rendering.
+ *
+ * CONNECTIONS (Dependency Map):
+ * ----------------------------
+ * RENDERED BY: Home.jsx
+ * RENDERS: AuthModel (conditional)
+ * READS FROM: Redux store (userData.name, userData.credits)
+ * WRITES TO: Redux store (setUserData(null) on logout)
+ * API CALLS: GET /api/auth/logout (clears httpOnly cookie)
+ * NAVIGATES TO: /pricing (buy credits), /history (interview list), / (after logout)
+ *
+ * DESIGN PATTERNS:
+ * ----------------
+ * - **Auth Gate Pattern**: Both interactive buttons check `if (!userData)` before
+ *   showing their dropdown. If not logged in, the AuthModel appears instead.
+ *   Once login completes (userData becomes truthy), the AuthModel auto-closes.
+ * - **Mutual Exclusion Popups**: Only one dropdown can be open at a time,
+ *   preventing visual clutter and confusion.
+ * - **Glass-panel Styling**: Uses the custom `.glass-panel` utility class from
+ *   index.css (bg-gray-100/50 + backdrop-blur-xl + border + shadow-glass).
+ *
+ * INTERVIEW QUESTIONS:
+ * --------------------
+ * Q1: Why is logout a GET request instead of POST?
+ * A1: RESTfully, logout should be POST (it modifies server state by clearing the cookie).
+ *     Using GET works but is technically incorrect and could be triggered by a browser
+ *     prefetch or crawler. A POST with CSRF protection would be more secure.
+ *
+ * Q2: What happens if the user clicks outside the popups?
+ * A2: Currently, the popups don't close on outside clicks — only by clicking the same
+ *     button again or clicking the other button (mutual exclusion). Adding a click-outside
+ *     listener or using a library like Headless UI would improve the UX.
+ *
+ * Q3: Why show `userData?.credits || 0` instead of just `userData?.credits`?
+ * A3: The `|| 0` fallback handles two cases: (1) userData is null (not logged in) →
+ *     shows "0", (2) userData.credits is somehow undefined → still shows "0".
+ *     The optional chaining `?.` prevents a crash if userData is null.
+ * ===========================================================================================
+ */

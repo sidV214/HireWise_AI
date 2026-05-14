@@ -61,3 +61,24 @@ export default function CustomCursor() {
         </div>
     );
 }
+
+/*
+ * ===========================================================================================
+ *                              NOTES — CustomCursor.jsx
+ * ===========================================================================================
+ *
+ * PURPOSE: Renders a custom emerald glowing dot that follows the mouse cursor with
+ *          smooth interpolation, creating a premium interactive feel.
+ *
+ * TECHNIQUE: Uses requestAnimationFrame for a 60fps render loop. Mouse position is tracked
+ * via the "mousemove" event. A lerp formula (`current += (target - current) * 0.15`) creates
+ * the trailing/easing effect. The dot is positioned with `transform: translate3d()` for
+ * GPU-accelerated rendering. `willChange: 'transform'` hints browser compositing.
+ *
+ * RESPONSIVE: Hidden below `lg` breakpoint via Tailwind's `hidden lg:block`. The
+ * `pointer-events-none` class ensures the cursor dot never intercepts click events.
+ *
+ * VISUAL: 8x8px emerald circle with 40% opacity and a green glow shadow, rendered with
+ * `mix-blend-screen` for a neon light effect against dark backgrounds.
+ * ===========================================================================================
+ */

@@ -317,3 +317,177 @@ function Step3Report({ report }) {
 }
 
 export default Step3Report
+
+/*
+ * ===========================================================================================
+ *                           NOTES — Step3Report.jsx
+ * ===========================================================================================
+ *
+ * PURPOSE: The analytics dashboard component (Step 3 of 3). Renders the complete interview
+ *          performance report including an overall score, three skill metrics, a performance
+ *          trend chart, per-question breakdown with AI feedback, and a PDF download feature.
+ *          This is the FINAL deliverable the user receives after completing an interview.
+ *
+ * ROLE IN ARCHITECTURE:
+ * ---------------------
+ * This component is used in TWO contexts:
+ * (1) Live Report: Rendered by InterviewPage.jsx (step === 3) immediately after interview
+ *     completion. Receives report data from Step2Interview via onFinish callback.
+ * (2) Historical Report: Rendered by InterviewReport.jsx (at /report/:id) after fetching
+ *     data from the backend. This enables users to revisit past reports.
+ * The same component serves both use cases — ensuring visual consistency.
+ *
+ * IMPORTS & DEPENDENCIES:
+ * -----------------------
+ * 1. `React`: Core library for JSX rendering.
+ * 2. `FaArrowLeft` (react-icons/fa): Back arrow icon for navigation button.
+ * 3. `useNavigate` (react-router-dom): For navigating to /history on back button click.
+ * 4. `motion` (motion/react): Framer Motion for entry animations on report cards.
+ * 5. `buildStyles, CircularProgressbar` (react-circular-progressbar): Circular gauge
+ *    component that visually displays the overall score as a filled arc (0-100%).
+ * 6. `Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis` (recharts):
+ *    Chart library components for the performance trend graph.
+ * 7. `jsPDF` (jspdf): Client-side PDF document generator.
+ * 8. `autotable` (jspdf-autotable): Plugin for jsPDF that creates formatted tables.
+ * 9. `SpotlightCard` (./SpotlightCard): Reusable card component with hover glow effects.
+ *
+ * PROPS:
+ * ------
+ * - `report`: { finalScore, confidence, communication, correctness, questionWiseScore[] }
+ *   If null/undefined, renders a "Loading Report..." placeholder.
+ *
+ * DATA TRANSFORMATIONS:
+ * ---------------------
+ * [Destructuring with defaults]:
+ *   `{ finalScore = 0, confidence = 0, communication = 0, correctness = 0, questionWiseScore = [] }`
+ *   All fields default to 0/[] to prevent crashes if the backend omits any field.
+ *
+ * [questionScoreData]:
+ *   Maps questionWiseScore array to Recharts-compatible format:
+ *   `[{ name: "Q1", score: 7 }, { name: "Q2", score: 5 }, ...]`
+ *
+ * [skills array]:
+ *   Transforms the three metrics into a renderable array:
+ *   `[{ label: "Confidence", value: 8 }, { label: "Communication", value: 6 }, ...]`
+ *
+ * [performanceText / shortTagline]:
+ *   Conditional strings based on finalScore thresholds:
+ *   - ≥ 8: "Ready for job oppurtunities." / "Excellent clarity and structured responses."
+ *   - ≥ 5: "Needs minor improvement..." / "Good foundation, refine articulation."
+ *   - < 5: "Significant improvement required." / "Work on clarity and confidence."
+ *
+ * FUNCTION ANALYSIS:
+ * ------------------
+ *
+ * [downloadPDF()] — Client-side PDF report generation
+ *   Creates a professional A4 PDF document entirely in the browser (NO backend call).
+ *   Flow:
+ *     1. Initializes jsPDF in portrait mode, millimeter units, A4 size.
+ *     2. Renders green title "AI Interview Performance Report" centered with underline.
+ *     3. Renders a light-green rounded rect containing "Final Score: X/10".
+ *     4. Renders a gray box with Confidence, Communication, Correctness values.
+ *     5. Renders a bordered "Professional Advice" box with conditional advice text:
+ *        - ≥ 8: Praise + "continue refining" advice
+ *        - ≥ 5: "Good foundation" + "improve clarity" advice
+ *        - < 5: "Significant improvement needed" + "practice regularly" advice
+ *        Uses `doc.splitTextToSize()` for word-wrapping within the box width.
+ *     6. Renders question table via autotable plugin with:
+ *        - Green header (fill [34, 197, 94]), white text
+ *        - Columns: #, Question, Score, Feedback
+ *        - Alternating row colors ([249, 250, 251] for odd rows)
+ *        - Auto column width for Feedback column
+ *     7. Saves as "AI_Interview_Report.pdf" → triggers browser download.
+ *   Edge Cases:
+ *     - Long feedback text auto-wraps within the table cell (valign: "top")
+ *     - If questionWiseScore is empty, the table renders with just the header row
+ *
+ * UI LAYOUT:
+ * ----------
+ * Full-screen with gradient background (gray-50 → emerald-900/10):
+ *
+ * HEADER BAR:
+ *   - Back button (→ /history) with FaArrowLeft
+ *   - "Interview Analytics Dashboard" title + "AI-powered performance insights" subtitle
+ *   - "Download PDF" button (emerald, right-aligned)
+ *
+ * BODY (3-column grid on lg, single column on mobile):
+ *
+ * COLUMN 1 (left):
+ *   - Overall Performance card:
+ *     - CircularProgressbar (emerald path, zinc text, dark trail)
+ *     - Score out of 10 with performance text + tagline
+ *   - Skill Evaluation card:
+ *     - Three horizontal bar charts (Confidence, Communication, Correctness)
+ *     - Each bar: gray-200 background track, emerald-600 filled portion
+ *     - Width calculated as `value * 10 + "%"` (since scores are 0-10)
+ *
+ * COLUMNS 2-3 (right, spans 2 columns):
+ *   - Performance Trend card:
+ *     - ResponsiveContainer wrapping an AreaChart (h-64 on mobile, h-72 on desktop)
+ *     - Y-axis domain [0, 10], X-axis shows Q1-Q5
+ *     - Emerald stroke (#22c55e), light green fill (#bbf7d0), strokeWidth: 3
+ *     - Monotone curve type for smooth line connections
+ *     - CartesianGrid with dashed lines, Tooltip for hover values
+ *   - Question Breakdown card:
+ *     - Maps questionWiseScore array to individual sub-cards
+ *     - Each sub-card shows: question number, question text, emerald score badge (/10)
+ *     - AI Feedback box with emerald background border
+ *     - Handles missing feedback: "No feedback available for this question."
+ *     - Handles missing question: "Question not available"
+ *
+ * CONNECTIONS (Dependency Map):
+ * ----------------------------
+ * RENDERED BY:
+ *   - InterviewPage.jsx (step === 3, live report)
+ *   - InterviewReport.jsx (/report/:id, historical report)
+ * RENDERS: SpotlightCard (for all card containers), CircularProgressbar, Recharts AreaChart
+ * NAVIGATES TO: /history (back button)
+ * API CALLS: None — this is a pure presentation component.
+ *
+ * DESIGN PATTERNS:
+ * ----------------
+ * - **Dual-Context Component**: Serves both live and historical report views without
+ *   any conditional logic. The `report` prop shape is identical in both cases.
+ * - **Client-Side PDF Generation**: The entire report PDF is built in the browser
+ *   using jsPDF — no server round-trip needed. This is faster and reduces server load.
+ * - **Defensive Destructuring**: All report fields default to 0 or [] using JavaScript
+ *   default assignment. This prevents the component from crashing if the backend
+ *   returns a partial response.
+ * - **Responsive Grid Layout**: The layout uses `grid-cols-1 lg:grid-cols-3`, ensuring
+ *   the report is readable on both mobile and desktop. Cards stack vertically on small
+ *   screens and arrange in a 1+2 column layout on large screens.
+ *
+ * INTERVIEW QUESTIONS:
+ * --------------------
+ * Q1: Why is the PDF generated client-side instead of on the server?
+ * A1: Client-side generation avoids a server round-trip, reduces backend load, and works
+ *     offline (once the data is loaded). The jsPDF library is lightweight (~300KB) and
+ *     the data needed for the PDF is already in the browser's memory (the report prop).
+ *
+ * Q2: How does Recharts handle responsive sizing?
+ * A2: The `ResponsiveContainer` component wraps the chart and automatically resizes it
+ *     to fill its parent container. Setting `width="100%" height="100%"` and controlling
+ *     the parent's height via Tailwind (`h-64 sm:h-72`) gives responsive chart dimensions.
+ *
+ * Q3: Why use `buildStyles` for CircularProgressbar instead of inline styles?
+ * A3: `buildStyles` is the library's recommended API for customizing the progressbar's
+ *     SVG elements (path color, text color, trail color). Direct CSS styling doesn't work
+ *     because the component renders SVG, not HTML — SVG uses different style properties.
+ *
+ * Q4: What does `score.score || 0` handle in questionScoreData mapping?
+ * A4: If a question wasn't answered (e.g., interview was abandoned), the score field
+ *     may be undefined or null. The `|| 0` fallback ensures the chart renders 0 instead
+ *     of NaN or causing a Recharts error.
+ *
+ * Q5: Why is autotable called as a function `autotable(doc, ...)` instead of `doc.autotable(...)`?
+ * A5: The `jspdf-autotable` v5 package changed its API. In v3, it patched the jsPDF
+ *     prototype. In v5, it exports a standalone function that takes the doc as its first
+ *     argument. This avoids monkey-patching and works better with ES modules.
+ *
+ * Q6: How does the performance advice adapt to the score?
+ * A6: Both the UI text (performanceText + shortTagline) and the PDF advice use the same
+ *     threshold logic (≥8, ≥5, <5) but with different copy. The UI shows brief text
+ *     (optimized for visual scanning), while the PDF shows longer advice paragraphs
+ *     (optimized for reading and print).
+ * ===========================================================================================
+ */

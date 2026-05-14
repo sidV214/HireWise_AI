@@ -450,7 +450,261 @@ function Step2Interview({ interviewData, onFinish }) {
 export default Step2Interview
 
 /* 
-    WORKFLOW
-    Mount -> Load Voice -> Intro Speak -> Question Speak -> Mic ON -> Timer Running -> Submit -> Feedback Speak -> Next Question -> Repeat -> Finish
-    
-*/
+ * ===========================================================================================
+ *                           NOTES — Step2Interview.jsx
+ * ===========================================================================================
+ *
+ * PURPOSE: The live interview session component (Step 2 of 3). This is the MOST COMPLEX
+ *          component in the entire frontend. It manages the real-time interview experience
+ *          by orchestrating 4 concurrent subsystems: Text-to-Speech, Speech-to-Text,
+ *          a countdown timer, and video playback — all synchronized through React state
+ *          and refs to deliver a seamless AI-interviewer experience.
+ *
+ * ROLE IN ARCHITECTURE:
+ * ---------------------
+ * Rendered by InterviewPage.jsx when step === 2. Receives `interviewData` (containing
+ * `interviewId`, `questions[]`, and `username`) from Step1SetUp via the parent component.
+ * On completion, calls `onFinish(reportData)` which advances to Step 3.
+ *
+ * COMPLETE WORKFLOW:
+ * ------------------
+ * Mount → Load Voices → Select Indian Voice → Run Intro Speech →
+ * Read Question 1 Aloud → Start Timer → Enable Mic → User Speaks/Types →
+ * Submit Answer (button or auto on timer=0) → AI Evaluates → Speak Feedback →
+ * Show "Next Question" Button → Reset State → Repeat for Q2-Q5 →
+ * After Last Question → Speak Closing Message → POST /finish → onFinish(report)
+ *
+ * IMPORTS & DEPENDENCIES:
+ * -----------------------
+ * 1. `React, useRef, useState, useMemo, useEffect`: Core React hooks for state, refs,
+ *    memoization, and side effects.
+ * 2. `motion` (motion/react): Framer Motion for button tap animations.
+ * 3. `FaMicrophone, FaMicrophoneSlash` (react-icons/fa): Toggle icons for mic state.
+ * 4. `videoOne, videoTwo` (../assets/videos/): Two MP4 avatar videos — one male, one female.
+ *    Synced with TTS to create a "talking avatar" effect.
+ * 5. `Timer` (./Timer): CircularProgressbar component showing countdown.
+ * 6. `axios`: HTTP client for submitting answers and finishing the interview.
+ * 7. `ServerURL` (../App): Backend API base URL.
+ * 8. `BsArrowRight` (react-icons/bs): Arrow icon on the "Next Question" button.
+ * 9. `useSelector` (react-redux): Reads userData for display name fallback.
+ *
+ * PROPS:
+ * ------
+ * - `interviewData`: { interviewId: string, questions: Array, username: string }
+ * - `onFinish`: (reportData) => void — callback to advance to Step 3
+ *
+ * STATE VARIABLES (Complete Inventory):
+ * -------------------------------------
+ * | Variable          | Type     | Purpose                                              |
+ * |-------------------|----------|------------------------------------------------------|
+ * | isIntroPhase      | boolean  | true during AI intro speech, prevents timer start    |
+ * | isMicOn           | boolean  | UI state for mic toggle button rendering              |
+ * | isMicOnRef        | ref      | Mirror of isMicOn for use in callbacks (no stale)    |
+ * | isAIPlaying       | boolean  | UI state — true when AI is speaking (pauses timer)   |
+ * | isAIPlayingRef    | ref      | Mirror of isAIPlaying for callbacks                  |
+ * | currentIndex      | number   | Index of the current question (0-4)                  |
+ * | answer            | string   | User's transcribed/typed answer text                 |
+ * | feedback          | string   | AI's evaluation feedback for the current question    |
+ * | timeLeft          | number   | Countdown seconds remaining                          |
+ * | selectedVoice     | object   | SpeechSynthesisVoice object chosen for TTS           |
+ * | isSubmitting      | boolean  | true during answer submission API call                |
+ * | voiceGender       | string   | "male" or "female" — determines which video to show  |
+ * | subtitle          | string   | Text being spoken by AI, displayed as subtitle       |
+ * | isTransitioning   | boolean  | true during question-to-question transition           |
+ * | isFinishing       | boolean  | true during the final report generation API call      |
+ * | actionLockRef     | ref      | Mutex lock preventing double-submit race conditions  |
+ * | videoRef          | ref      | Reference to the <video> DOM element                 |
+ * | recongitionRef    | ref      | Reference to webkitSpeechRecognition instance        |
+ *
+ * useEffect ANALYSIS (7 Effects):
+ * --------------------------------
+ *
+ * [Effect 1 — Voice Loading] deps: []
+ *   Runs once on mount. Calls `speechSynthesis.getVoices()` to get available system voices.
+ *   Applies a priority-based voice selection:
+ *   Priority 1: Named Indian voices (neerja, heera, veena, aditi, ravi, etc.)
+ *   Priority 2: Any voice with lang "en-IN" or "hi-IN" or name containing "india"
+ *   Priority 3: Any English female voice (excluding UK accents)
+ *   Priority 4: First available voice (absolute fallback)
+ *   Also sets voiceGender based on the selected voice name.
+ *   Registers `onvoiceschanged` handler for Chrome (voices load asynchronously in Chrome).
+ *
+ * [Effect 2 — Intro & Question Speech] deps: [selectedVoice, isIntroPhase, currentIndex]
+ *   Triggers when voice is ready or when intro phase / question index changes.
+ *   If intro phase: speaks two greeting sentences, then sets isIntroPhase = false.
+ *   If not intro phase: waits 800ms, optionally adds a "challenging" preamble for last Q,
+ *   then speaks the current question and resets the timer.
+ *
+ * [Effect 3 — Timer Countdown] deps: [isIntroPhase, currentIndex, isAIPlaying, isTransitioning]
+ *   Creates a 1-second setInterval that decrements timeLeft.
+ *   PAUSES when: isIntroPhase, isAIPlaying, or isTransitioning is true.
+ *   When timeLeft reaches 1, clears the interval and sets to 0.
+ *   Returns cleanup function to clear interval on re-render.
+ *
+ * [Effect 4 — Timer Reset] deps: [currentIndex]
+ *   Resets timeLeft to the new question's timeLimit when currentIndex changes.
+ *   Guard: only runs after intro phase with a valid currentQuestion.
+ *
+ * [Effect 5 — Speech Recognition Setup] deps: []
+ *   Runs once on mount. Creates a webkitSpeechRecognition instance with:
+ *   - lang: "en-IN" (optimized for Indian accents)
+ *   - continuous: true (doesn't stop after each phrase)
+ *   - interimResults: false (only fires on final transcript)
+ *   The onresult handler appends transcript to the answer state.
+ *   The onend handler auto-restarts recognition if mic should be on and AI isn't speaking
+ *   (uses refs, not state, to avoid stale closures).
+ *
+ * [Effect 6 — Auto-Submit on Timer Zero] deps: [timeLeft]
+ *   When timeLeft === 0 and the user hasn't already submitted or received feedback,
+ *   automatically calls submitAnswer(). This enforces the time limit.
+ *
+ * [Effect 7 — Cleanup on Unmount] deps: []
+ *   Stops and aborts speech recognition. Cancels any in-progress speech synthesis.
+ *   Prevents audio from continuing to play after navigating away.
+ *
+ * FUNCTION-BY-FUNCTION ANALYSIS:
+ * ------------------------------
+ *
+ * [setMicState(state)] — Synchronized state updater
+ *   Updates BOTH isMicOnRef.current AND isMicOn state simultaneously.
+ *   This dual-update pattern ensures event handlers (which read refs) and React rendering
+ *   (which reads state) always have the same value.
+ *
+ * [setAIState(state)] — Synchronized state updater
+ *   Same pattern as setMicState but for the AI playing state.
+ *
+ * [speakText(text)] — Promise-based TTS function
+ *   Returns a Promise that resolves when the speech finishes.
+ *   Flow:
+ *     1. Cancels any in-progress speech via speechSynthesis.cancel()
+ *     2. Adds pauses after commas and periods for natural pacing
+ *     3. Creates SpeechSynthesisUtterance with selected voice, rate 0.92, pitch 1.05
+ *     4. onstart: sets AI state active, stops mic, plays avatar video
+ *     5. onend: pauses video, resets to frame 0, sets AI inactive, restarts mic if enabled
+ *     6. Sets subtitle text for visual display
+ *     7. CRITICAL: 50ms setTimeout before speak() — Chrome silently drops utterances
+ *        if speak() is called immediately after cancel()
+ *   Edge Cases:
+ *     - If speechSynthesis or selectedVoice is null, resolves immediately (no-op)
+ *     - onerror handler catches synthesis failures (e.g., voice unavailable mid-session)
+ *
+ * [startMic() / stopMic()] — Recognition control
+ *   Wrapped in try/catch because calling start() on an already-started recognition
+ *   throws InvalidStateError, and stop() on already-stopped throws too.
+ *
+ * [toggleMic()] — UI mic button handler
+ *   Flips mic state and calls startMic/stopMic accordingly.
+ *
+ * [submitAnswer()] — Answer submission to backend
+ *   Protected by actionLockRef (prevents double-click submission).
+ *   Flow:
+ *     1. Sets lock, stops mic, shows "Submitting..." state
+ *     2. POSTs { interviewId, questionIndex, answer, timeTaken } to /api/interview/submit-answer
+ *     3. On success: stores feedback text, speaks feedback aloud
+ *     4. On error: logs error, releases lock
+ *   Edge Cases:
+ *     - If user double-clicks Submit, actionLockRef prevents duplicate API calls
+ *     - timeTaken = question.timeLimit - timeLeft (server validates this independently)
+ *
+ * [handleNext()] — Advance to next question
+ *   Protected by actionLockRef + isFinishing + isTransitioning guards.
+ *   Flow:
+ *     If last question: speaks closing message → calls finishInterview()
+ *     If not last: speaks transition phrase → clears answer/feedback → increments currentIndex
+ *   Edge Cases:
+ *     - For Q4 → Q5 transition, skips the "let's move to the next question" phrase
+ *       to avoid redundancy with the "challenging" preamble in Effect 2.
+ *
+ * [finishInterview()] — Final report generation
+ *   Disables mic permanently. POSTs { interviewId } to /api/interview/finish.
+ *   On success: calls onFinish(result.data) → parent transitions to Step 3.
+ *   On error: sets feedback with error message, resets isFinishing to allow retry.
+ *
+ * UI LAYOUT:
+ * ----------
+ * Split-panel layout (flex-col lg:flex-row):
+ * LEFT PANEL (35%):
+ *   - Avatar video (memoized to prevent remounting)
+ *   - Subtitle box (shows AI speech text, fades when silent)
+ *   - Timer panel with CircularProgressbar, question counter, total counter
+ * RIGHT PANEL (65%):
+ *   - "AI Smart Interview" header
+ *   - Question card (hidden during intro phase)
+ *   - Textarea for answer (accepts both typed and transcribed input)
+ *   - Mic toggle button + Submit Answer button (shown before feedback)
+ *   - Feedback card + Next Question button (shown after feedback)
+ *
+ * CONNECTIONS (Dependency Map):
+ * ----------------------------
+ * RENDERED BY: InterviewPage.jsx (step === 2)
+ * RENDERS: Timer.jsx (circular countdown)
+ * API CALLS:
+ *   - POST /api/interview/submit-answer (per question, 5 times total)
+ *   - POST /api/interview/finish (once, after all questions)
+ * RECEIVES: interviewData from Step1SetUp via InterviewPage
+ * PASSES TO: onFinish callback → InterviewPage → Step3Report
+ *
+ * DESIGN PATTERNS:
+ * ----------------
+ * - **Ref-State Mirror Pattern**: For values read in callbacks (event handlers, onend),
+ *   a useRef mirror is maintained alongside useState. This avoids the classic React
+ *   stale closure problem where callbacks capture old state values.
+ * - **Mutex Lock Pattern**: actionLockRef acts as a manual mutex to prevent concurrent
+ *   operations (double-submit, simultaneous next+submit).
+ * - **Promise-based Speech Queue**: speakText returns a Promise, enabling sequential
+ *   speech using async/await: `await speakText("first"); await speakText("second")`.
+ * - **Graceful Degradation**: If webkitSpeechRecognition is not available, the user
+ *   can still type answers. If speechSynthesis is unavailable, questions display as text.
+ * - **Video Memoization**: The <video> element is wrapped in useMemo to prevent
+ *   React from recreating it on every render (which would restart playback).
+ *
+ * INTERVIEW QUESTIONS:
+ * --------------------
+ * Q1: Why use useRef mirrors alongside useState instead of just useRef?
+ * A1: useState triggers re-renders when the value changes (e.g., updating the mic icon).
+ *     useRef doesn't trigger re-renders but always holds the current value. Callbacks like
+ *     recognition.onend need the current value immediately (ref), while the UI needs to
+ *     reflect changes visually (state). Using both gives us the best of both worlds.
+ *
+ * Q2: Why is there a 50ms delay between cancel() and speak()?
+ * A2: Chrome's speech synthesis engine has an internal state machine. When cancel() is
+ *     called, it needs time to transition from "speaking" to "idle." If speak() is called
+ *     during this transition, Chrome silently discards the utterance. The 50ms delay ensures
+ *     the engine has fully returned to idle before queuing a new utterance.
+ *
+ * Q3: How do you prevent the user from submitting the same answer twice?
+ * A3: Three guards: (1) actionLockRef.current is set to true at the start of submitAnswer
+ *     and released after completion, (2) isSubmitting state is checked, (3) the Submit
+ *     button has disabled={isSubmitting}. All three must be false for submission to proceed.
+ *
+ * Q4: What happens if the browser doesn't support webkitSpeechRecognition?
+ * A4: The Effect 5 guard `if (!("webkitSpeechRecognition" in window)) return` skips
+ *     setup entirely. The mic button still renders but toggleMic() will be a no-op since
+ *     recongitionRef.current will remain null. The user can still type their answers.
+ *
+ * Q5: Why does the timer pause when isAIPlaying or isTransitioning is true?
+ * A5: It would be unfair to count down the user's time while the AI is speaking the
+ *     question or transitioning between questions. The timer only runs when the user
+ *     has control — i.e., when they can actually formulate and speak their answer.
+ *
+ * Q6: How does the voice selection algorithm work?
+ * A6: It uses a cascading priority system. First, it searches for named Indian voices
+ *     (neerja, heera, etc.) which are high-quality system voices. If none found, it falls
+ *     back to any voice with "en-IN" or "hi-IN" locale. Then any English female voice.
+ *     Finally, the first available voice. Chrome loads voices asynchronously, so the
+ *     onvoiceschanged listener handles late-loading voice packs.
+ *
+ * Q7: Why is the <video> element memoized with useMemo?
+ * A7: Without memoization, every re-render would create a new <video> JSX element.
+ *     React would diff it against the old one and, because the component function is
+ *     recreated, potentially remount it — resetting playback to 0. useMemo with
+ *     [videoSource] as dependency ensures the element is only recreated when the
+ *     video source actually changes (male vs. female voice selection).
+ *
+ * Q8: What is the humanText transformation in speakText?
+ * A8: The code replaces commas with ", ... " and periods with ". ... " to insert
+ *     artificial pauses into the speech. Without this, TTS engines speak continuously
+ *     at machine speed, which sounds unnatural. The ellipsis characters add ~300ms
+ *     pauses at natural breath points, making the AI voice more human-like.
+ * ===========================================================================================
+ */

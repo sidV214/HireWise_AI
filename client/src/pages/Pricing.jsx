@@ -282,3 +282,150 @@ function Pricing() {
 }
 
 export default Pricing
+
+/*
+ * ===========================================================================================
+ *                              NOTES — Pricing.jsx
+ * ===========================================================================================
+ *
+ * PURPOSE: Credit purchase page with three tiered pricing plans and full Razorpay payment
+ *          integration. Handles the complete purchase flow from plan selection through
+ *          payment verification to credit addition and success animation.
+ *
+ * ROLE IN ARCHITECTURE:
+ * ---------------------
+ * Mounted at "/pricing" route in App.jsx. Accessible from the Navbar's "Buy more credits"
+ * popup. This is the only page that interacts with the payment system. The Razorpay
+ * checkout widget is loaded as an external script and invoked client-side.
+ *
+ * IMPORTS & DEPENDENCIES:
+ * -----------------------
+ * 1. `React, useState, useEffect`: Component rendering, state, and redirect timer.
+ * 2. `motion, AnimatePresence` (motion/react): Entry animations, page transitions,
+ *    and the success screen's spring-animated checkmark.
+ * 3. `pageTransition, staggerContainer, cardEntry, buttonTap` (../utils/motion):
+ *    Predefined animation variants for page fade, card stagger, and button feedback.
+ * 4. `SpotlightCard` (../components/SpotlightCard): Hover-glow card for plan display.
+ * 5. `MagneticButton` (../components/MagneticButton): Spring-physics CTA buttons.
+ * 6. `useSelector, useDispatch` (react-redux): Read userData (credits), dispatch updates.
+ * 7. `setUserData` (../redux/userSlice): Action to update credits after purchase.
+ * 8. `useNavigate` (react-router-dom): Auto-redirect to "/" after successful payment.
+ * 9. `axios`: HTTP client for payment API calls.
+ * 10. `ServerURL` (../App): Backend base URL.
+ * 11. Various react-icons: FaRocket, BsStars, BsCheckCircle, BsCoin for UI elements.
+ *
+ * STATE VARIABLES:
+ * ----------------
+ * | Variable       | Type     | Purpose                                           |
+ * |----------------|----------|---------------------------------------------------|
+ * | selectedPlan   | number   | Index of the currently selected plan (0, 1, or 2)  |
+ * | loadingPlan    | number   | Index of the plan currently being purchased (-1)   |
+ * | paymentSuccess | boolean  | true → shows the full-screen success animation     |
+ *
+ * PLAN DATA (plans array):
+ * -------------------------
+ * | Plan         | Price  | Credits | Badge       | Features                          |
+ * |--------------|--------|---------|-------------|-----------------------------------|
+ * | Free         | ₹0     | 100     | —           | 2 interviews, basic analytics     |
+ * | Starter Pack | ₹100   | 150     | —           | 3 interviews, full analytics      |
+ * | Pro Pack     | ₹500   | 650     | "Best Value"| 13 interviews, priority, PDF      |
+ *
+ * FUNCTION ANALYSIS:
+ * ------------------
+ *
+ * [handlePayment(plan, index)] — Full Razorpay payment flow
+ *   The CORE function of this page. Handles the entire payment lifecycle.
+ *   Flow:
+ *     1. Sets loadingPlan to the clicked plan index (shows "Processing..." on button).
+ *     2. POSTs to /api/payment/order with { planId, amount, credits }.
+ *        Backend creates a Razorpay order (amount × 100 for paise) and Payment document.
+ *     3. Constructs Razorpay checkout options:
+ *        - key: VITE_RAZORPAY_KEY_ID from environment variables
+ *        - amount/currency: from the backend order response
+ *        - order_id: Razorpay's order ID
+ *        - prefill: user's name and email from Redux
+ *        - theme: emerald color (#10b981)
+ *     4. Opens the Razorpay checkout widget (new window.Razorpay(options).open()).
+ *     5. On successful payment, the handler callback fires with:
+ *        { razorpay_order_id, razorpay_payment_id, razorpay_signature }
+ *     6. POSTs to /api/payment/verify with these three values.
+ *        Backend verifies the HMAC signature and increments credits atomically.
+ *     7. On verification success:
+ *        - Updates Redux with new credit balance
+ *        - Sets paymentSuccess = true (triggers success animation)
+ *     8. On error at any step: logs error and resets loadingPlan.
+ *   Edge Cases:
+ *     - If Razorpay script isn't loaded, `new window.Razorpay()` throws.
+ *     - If user closes the Razorpay widget without paying, no handler fires.
+ *     - If verify endpoint fails, credits are NOT added (server-side integrity).
+ *
+ * SUCCESS SCREEN (Conditional Rendering):
+ * ----------------------------------------
+ * When paymentSuccess is true, the entire page is replaced with a full-screen overlay:
+ *   - Green gradient background with fade-in animation.
+ *   - Spring-animated BsCheckCircle icon (scale 0 → 1 with bounce).
+ *   - "Payment Successful!" heading.
+ *   - useEffect starts a 3-second timer that auto-navigates to "/".
+ *   - Animated progress bar fills from 0% to 100% over 3 seconds.
+ *   - "Redirecting to home..." subtitle.
+ *
+ * UI LAYOUT (Normal State):
+ * -------------------------
+ * Full-screen with animated page transition:
+ *   - Header: "Choose Your Plan" title + "Select the best plan" subtitle + back button.
+ *   - Credits Display: Shows current credit count with BsCoin icon.
+ *   - Plan Grid: 3-column grid (stacked on mobile) with SpotlightCard for each plan:
+ *     - Plan header with name and "Best Value" badge (Pro Pack only).
+ *     - Price display with emerald color.
+ *     - Feature list with BsCheckCircle check icons.
+ *     - "Select Plan" / "Current Plan" / "Proceed to Pay" button based on state.
+ *   - Selected plan is highlighted with emerald border and ring.
+ *
+ * CONNECTIONS (Dependency Map):
+ * ----------------------------
+ * MOUNTED AT: /pricing route in App.jsx
+ * API CALLS:
+ *   - POST /api/payment/order → payment.controller.js::createOrder
+ *   - POST /api/payment/verify → payment.controller.js::verifyPayment
+ * READS FROM: Redux store (userData.name, userData.email, userData.credits)
+ * WRITES TO: Redux store (setUserData with updated credits)
+ * NAVIGATES TO: / (after payment success, via 3-second auto-redirect)
+ * EXTERNAL: Razorpay checkout widget (loaded via CDN script in index.html)
+ *
+ * DESIGN PATTERNS:
+ * ----------------
+ * - **Two-Step Payment Verification**: Order is created on the backend first (gives us
+ *   control over the amount). Payment is verified on the backend second (prevents
+ *   client-side tampering with the payment response).
+ * - **Optimistic Credit Update**: After verification succeeds, the Redux store is updated
+ *   immediately without waiting for a fresh user fetch.
+ * - **Success Screen with Auto-Redirect**: The 3-second delay with progress bar gives
+ *   the user visual confirmation before redirecting, preventing confusion.
+ * - **Staggered Plan Cards**: Using staggerContainer + cardEntry variants to create
+ *   a cascading entrance effect when the page loads.
+ *
+ * INTERVIEW QUESTIONS:
+ * --------------------
+ * Q1: Why is the Razorpay key stored in an environment variable?
+ * A1: The key ID is a public identifier (like a Stripe publishable key) — it's safe to
+ *     expose in the frontend. But using an env var (`import.meta.env.VITE_RAZORPAY_KEY_ID`)
+ *     allows switching between test and live keys without code changes.
+ *
+ * Q2: What prevents a user from tampering with the payment amount?
+ * A2: The amount is set on the backend when creating the Razorpay order (createOrder).
+ *     Even if the frontend sends a fake amount, Razorpay uses the order's amount for
+ *     the actual charge. The HMAC signature verification ensures the payment matches
+ *     the original order.
+ *
+ * Q3: Why does the success screen auto-redirect instead of having a button?
+ * A3: Auto-redirect with a visible progress bar is a common e-commerce UX pattern.
+ *     It eliminates the need for user action after payment, reduces bounce rate, and
+ *     the progress bar provides visual feedback about the redirect timing.
+ *
+ * Q4: What happens if the user refreshes during the success screen?
+ * A4: The paymentSuccess state is lost (it's local component state, not persisted).
+ *     The page will re-render in its normal pricing view. The credits have already been
+ *     added to the database, so the user's credit count will be correct after the
+ *     App.jsx session rehydration useEffect runs.
+ * ===========================================================================================
+ */

@@ -235,3 +235,177 @@ function Step1SetUp({ onStart }) {
 }
 
 export default Step1SetUp
+
+/*
+ * ===========================================================================================
+ *                              NOTES — Step1SetUp.jsx
+ * ===========================================================================================
+ *
+ * PURPOSE: The interview setup wizard (Step 1 of 3). This is the user's entry point
+ *          into the interview experience. It collects all necessary configuration data
+ *          (role, experience, mode) and optionally analyzes a resume PDF using AI to
+ *          personalize the interview questions.
+ *
+ * ROLE IN ARCHITECTURE:
+ * ---------------------
+ * Rendered by InterviewPage.jsx when step === 1. It is the gateway component that:
+ * (1) Validates user input before allowing an interview to start,
+ * (2) Calls two backend endpoints (resume analysis + question generation),
+ * (3) Deducts credits from the user's account,
+ * (4) Passes the generated interview data to the parent via onStart() callback,
+ *     which triggers the transition to Step 2 (live interview).
+ *
+ * IMPORTS & DEPENDENCIES:
+ * -----------------------
+ * 1. `React, useState`: Core React for component rendering and local state management.
+ * 2. `motion` (motion/react): Framer Motion for slide-in animations, hover scales, and
+ *    button tap effects on the feature cards and form elements.
+ * 3. `FaUserTie, FaBriefcase, FaFileUpload, FaMicrophoneAlt, FaChartLine` (react-icons/fa):
+ *    Icons used in the left panel feature list and form input decorations.
+ * 4. `axios`: HTTP client for API calls (resume upload and question generation).
+ * 5. `ServerURL` (../App): Backend base URL for API endpoints.
+ * 6. `useDispatch, useSelector` (react-redux): Redux hooks for reading user state and
+ *    dispatching credit updates after question generation.
+ * 7. `setUserData` (../redux/userSlice): Action creator for updating the Redux store
+ *    with the new credit balance after deduction.
+ *
+ * PROPS:
+ * ------
+ * - `onStart`: (interviewData) => void — Callback receiving the generated questions,
+ *   interviewId, credits left, and username. Called after successful question generation.
+ *
+ * STATE VARIABLES (Complete Inventory):
+ * -------------------------------------
+ * | Variable      | Type     | Default       | Purpose                                    |
+ * |---------------|----------|---------------|--------------------------------------------|
+ * | role          | string   | ""            | Target job role (e.g., "Frontend Developer")|
+ * | experience    | string   | ""            | Experience level (e.g., "2 years")          |
+ * | mode          | string   | "Technical"   | Interview type: "Technical" or "HR"         |
+ * | resumeFile    | File     | null          | The selected PDF file object                |
+ * | loading       | boolean  | false         | true during question generation API call    |
+ * | projects      | array    | []            | Extracted project names from resume         |
+ * | skills        | array    | []            | Extracted skills from resume                |
+ * | resumeText    | string   | ""            | Full extracted text from the PDF            |
+ * | analysisDone  | boolean  | false         | true after successful resume analysis       |
+ * | analysing     | boolean  | false         | true during resume analysis API call        |
+ *
+ * FUNCTION-BY-FUNCTION ANALYSIS:
+ * ------------------------------
+ *
+ * [handleUploadResume()] — Resume PDF analysis
+ *   Guard: returns early if no file selected or already analysing.
+ *   Flow:
+ *     1. Creates a FormData object and appends the PDF file as "resume".
+ *     2. POSTs to /api/interview/resume with withCredentials (sends JWT cookie).
+ *     3. The backend (interview.controller.js::analyzeResume) reads the PDF using pdfjs-dist,
+ *        extracts all text, sends it to GPT-4o-mini for structured extraction.
+ *     4. On success: populates role, experience, projects[], skills[], resumeText.
+ *     5. Sets analysisDone = true, which hides the upload zone and shows the results panel.
+ *   Edge Cases:
+ *     - If the resume is an image-based PDF (scanned), the backend returns empty fields.
+ *     - The `|| ""` and `|| []` fallbacks handle missing fields in the AI response.
+ *     - Error state resets `analysing` to false, allowing the user to retry.
+ *
+ * [handleStart()] — Generate interview questions and begin
+ *   NOTE: The function signature `(req, res)` is a leftover from copy-pasting a backend
+ *   controller pattern — these parameters are never used.
+ *   Flow:
+ *     1. Sets loading = true (disables the Start button, shows "Starting...").
+ *     2. POSTs { role, experience, mode, resumeText, projects, skills } to
+ *        /api/interview/generate-questions with credentials.
+ *     3. The backend checks credits >= 50, generates 5 questions via AI, deducts credits,
+ *        creates an Interview document, and returns the data.
+ *     4. Updates Redux store with new credit balance:
+ *        dispatch(setUserData({ ...userData, credits: result.data.creditsLeft }))
+ *     5. Calls onStart(result.data) which passes the data to InterviewPage.jsx,
+ *        triggering setStep(2) and rendering Step2Interview.
+ *   Edge Cases:
+ *     - Insufficient credits: backend returns error → caught by catch → shows alert
+ *       with the backend error message.
+ *     - Network failure: caught by catch → shows generic "Failed to start" alert.
+ *     - Button is disabled when role or experience is empty, or when loading is true.
+ *
+ * UI LAYOUT:
+ * ----------
+ * Full-screen centered layout with a max-w-6xl split-panel card:
+ *
+ * LEFT PANEL (hidden on mobile):
+ *   - "Start Your AI Interview" heading with subtitle
+ *   - Three animated feature cards (staggered entrance by 0.15s each):
+ *     1. 👔 "Choose Role & Experience" (FaUserTie icon)
+ *     2. 🎙️ "Smart Voice Interview" (FaMicrophoneAlt icon)
+ *     3. 📊 "Performance Analytics" (FaChartLine icon)
+ *   - Each card scales 1.03x on hover for interactive feedback
+ *
+ * RIGHT PANEL:
+ *   - "Interview Setup" heading
+ *   - Role input field with FaUserTie icon prefix
+ *   - Experience input field with FaBriefcase icon prefix
+ *   - Mode dropdown (Technical / HR)
+ *   - CONDITIONAL: Resume upload zone (shown when analysisDone is false)
+ *     - Dashed border clickable area with FaFileUpload icon
+ *     - Hidden <input type="file" accept="application/pdf">
+ *     - "Analyze Resume" button appears after file selection
+ *   - CONDITIONAL: Resume analysis results (shown when analysisDone is true)
+ *     - Projects list (bulleted)
+ *     - Skills list (emerald pill badges in flexbox wrap)
+ *   - "Start Interview" button (disabled until role + experience are filled)
+ *
+ * ANIMATIONS:
+ * -----------
+ * - Left panel slides in from x: -80 with 0.7s duration
+ * - Right panel slides in from x: +80 with 0.7s duration (creates split-open effect)
+ * - Feature cards stagger (0.3s base + 0.15s * index)
+ * - Analysis results animate in with y: 20 opacity fade
+ * - Buttons have whileHover (scale 1.03) and whileTap (scale 0.95)
+ *
+ * CONNECTIONS (Dependency Map):
+ * ----------------------------
+ * RENDERED BY: InterviewPage.jsx (step === 1)
+ * API CALLS:
+ *   - POST /api/interview/resume → interview.controller.js::analyzeResume
+ *   - POST /api/interview/generate-questions → interview.controller.js::generateQuestions
+ * READS FROM: Redux store (userData for credit display check)
+ * WRITES TO: Redux store (setUserData for credit update)
+ * PASSES TO: InterviewPage.jsx → Step2Interview (via onStart callback)
+ *
+ * DESIGN PATTERNS:
+ * ----------------
+ * - **Progressive Disclosure**: The resume upload zone is hidden after analysis,
+ *   replaced by the results panel. The Start button is disabled until required fields
+ *   are filled. This guides the user through the setup flow naturally.
+ * - **Optimistic Credit Update**: Credits are updated in Redux immediately after the
+ *   API returns, rather than waiting for a separate user fetch. This provides instant
+ *   feedback in the Navbar's credit display.
+ * - **Split-Panel Information Architecture**: Left panel educates (what will happen),
+ *   right panel collects (user input). This is a common SaaS onboarding pattern.
+ *
+ * INTERVIEW QUESTIONS:
+ * --------------------
+ * Q1: Why does handleStart have `(req, res)` parameters?
+ * A1: It's a code artifact from copying the Express controller pattern. In React event
+ *     handlers, these would normally be `(event)` or `()`. The parameters are never used
+ *     and could be safely removed.
+ *
+ * Q2: Why use FormData for the resume upload instead of JSON?
+ * A2: File uploads require `multipart/form-data` encoding. JSON cannot carry binary file
+ *     data efficiently. FormData automatically sets the correct Content-Type header that
+ *     Multer on the backend expects.
+ *
+ * Q3: What happens if the user doesn't upload a resume?
+ * A3: The resume is optional. If no resume is uploaded, resumeText, projects, and skills
+ *     are all empty. The backend still generates questions based on just the role,
+ *     experience, and mode — the questions will be more generic rather than personalized.
+ *
+ * Q4: Why update Redux credits inline instead of re-fetching the user?
+ * A4: Performance optimization. Instead of making a separate GET /api/user/current-user
+ *     call, we spread the existing userData and override just the credits field. This
+ *     avoids an extra network roundtrip and provides instant UI feedback.
+ *
+ * Q5: How is the file input triggered without a visible input element?
+ * A5: The actual `<input type="file">` has `className="hidden"`. When the user clicks
+ *     the dashed upload zone, `document.getElementById("resumeUpload").click()` is
+ *     called programmatically, which opens the native file picker. The `e.stopPropagation()`
+ *     on the "Analyze Resume" button prevents the click from re-opening the file picker.
+ * ===========================================================================================
+ */

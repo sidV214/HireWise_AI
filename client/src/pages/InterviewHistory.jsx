@@ -98,3 +98,25 @@ function InterviewHistory() {
 }
 
 export default InterviewHistory
+
+/*
+ * ===========================================================================================
+ *                              NOTES — InterviewHistory.jsx
+ * ===========================================================================================
+ *
+ * PURPOSE: Displays a list of all past interviews for the authenticated user.
+ *
+ * DATA FETCHING: useEffect on mount calls GET /api/interview/get-interview to fetch
+ * interview summaries (role, experience, mode, finalScore, status, createdAt).
+ * Results are sorted newest-first by the backend.
+ *
+ * UI: Each interview renders as a card showing: role title, experience + mode, date,
+ * score (/10), and a colored status badge (green for Completed, yellow for In Progress).
+ * Clicking a card navigates to /report/:id for the full analytics dashboard.
+ *
+ * EMPTY STATE: If no interviews exist, shows a glass-panel with "No interviews found."
+ *
+ * CONNECTIONS: Calls backend via ServerURL. Navigates to / (back button) and
+ * /report/:id (card click). Mounted at /history route.
+ * ===========================================================================================
+ */

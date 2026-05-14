@@ -25,3 +25,20 @@ export default function SpotlightCard({ children, className = '', glowColor = 'r
     </motion.div>
   );
 }
+
+/*
+ * ===========================================================================================
+ *                              NOTES — SpotlightCard.jsx
+ * ===========================================================================================
+ *
+ * PURPOSE: A reusable card wrapper with hover-reactive effects — lift, scale, border glow,
+ *          shadow expansion, and a shimmer sweep animation.
+ *
+ * PROPS: children, className, glowColor (default: emerald), tilt (unused currently), ...rest.
+ * HOVER EFFECTS: (1) Y-axis lift (-4px), (2) scale 1.005x, (3) border transitions to
+ * emerald-500/30, (4) shadow expands to emerald glow, (5) shimmer gradient sweeps across.
+ *
+ * USED IN: Home.jsx (AI capabilities cards), Pricing.jsx (plan cards),
+ * Step3Report.jsx (performance cards, chart cards, question breakdown cards).
+ * ===========================================================================================
+ */
